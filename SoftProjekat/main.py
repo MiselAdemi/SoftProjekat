@@ -3,52 +3,19 @@ import matplotlib.pyplot as plt
 import  matplotlib.cm as cm
 from matplotlib import pylab
 import collections
+import cv2
 
 from loadDataSet import LoadDataSet
+from loadTest import LoadTest
 import numpy as np
 from keras.models import  Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.optimizers import SGD
-import cv2
 
 
 def resize_region(region):
-    return cv2.resize(region,(28,28), interpolation = cv2.INTER_NEAREST)
-
-
-def image_gray(image):
-    return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-
-def image_bin(image_gs):
-    height, width = image_gs.shape[0:2]
-    ret,image_bin = cv2.threshold(image_gs, 127, 255, cv2.THRESH_BINARY)
-    return image_bin
-
-
-def display_image(image, color= False):
-    if color:
-        plt.imshow(image)
-    else:
-        plt.imshow(image, 'gray')
-
-
-def select_roi(image_orig, image_bin):
-    img, contours, hierarchy = cv2.findContours(image_bin.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    sorted_regions = [] # lista sortiranih regiona po x osi (sa leva na desno)
-    regions_dic = {}
-    for contour in contours:
-        x,y,w,h = cv2.boundingRect(contour) #koordinate i velicina granicnog pravougaonika
-        area = cv2.contourArea(contour)
-        if area > 100 and h < 100 and h > 15 and w > 20:
-            region = image_bin[y:y+h+1,x:x+w+1];
-            regions_dic[x] = resize_region(region)
-            cv2.rectangle(image_orig,(x,y),(x+w,y+h),(0,255,0),2)
-
-    sorted_regions_dic = collections.OrderedDict(sorted(regions_dic.items()))
-    sorted_regions = sorted_regions_dic.values()
-
-    return image_orig, sorted_regions
+    resized = cv2.resize(region,(28,28), interpolation = cv2.INTER_NEAREST)
+    return resized
 
 
 def matrix_to_vector(m):
@@ -71,21 +38,89 @@ def convert_output(seq):
         nn_outputs.append(output)
     return np.array(nn_outputs)
 
-tone = LoadDataSet('samples/ddur.wav')
 
-X_train = tone.DataSet
+def convert_output2(outputs):
+    return np.eye(len(outputs))
+
+
+def create_ann():
+
+    ann = Sequential()
+
+    ann.add(Dense(128, input_dim=784, activation='sigmoid'))
+    ann.add(Dense(7, activation='sigmoid'))
+    return ann
+
+
+def train_ann(ann, X_train, y_train):
+    X_train = np.array(X_train, np.float32)
+    y_train = np.array(y_train, np.float32)
+
+    sgd = SGD(lr=0.01, momentum=0.9)
+    ann.compile(loss='mean_squared_error', optimizer=sgd)
+
+    ann.fit(X_train, y_train, nb_epoch=500, batch_size=1, verbose = 0, shuffle=False, show_accuracy = False)
+
+    return ann
+
+
+def winner(output): # output je vektor sa izlaza neuronske mreze
+    return max(enumerate(output), key=lambda x: x[1])[0]
+
+
+def display_result(outputs, alphabet):
+    result = []
+    for output in outputs:
+        result.append(alphabet[winner(output)])
+    return result
+
+A_tone = LoadDataSet('samples/adur.wav')
+B_tone = LoadDataSet('samples/hdur.wav')
+C_tone = LoadDataSet('samples/cdur.wav')
+D_tone = LoadDataSet('samples/ddur.wav')
+E_tone = LoadDataSet('samples/edur.wav')
+F_tone = LoadDataSet('samples/fdur.wav')
+G_tone = LoadDataSet('samples/gdur.wav')
+
+
+X_train = []
+X_train.append(resize_region(A_tone.DataSet))
+X_train.append(resize_region(B_tone.DataSet))
+X_train.append(resize_region(C_tone.DataSet))
+X_train.append(resize_region(D_tone.DataSet))
+X_train.append(resize_region(E_tone.DataSet))
+X_train.append(resize_region(F_tone.DataSet))
+X_train.append(resize_region(G_tone.DataSet))
 
 x_train = prepare_for_rnn(X_train)
-tones = ['D']
-y_train = convert_output(tones)
+tones = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+y_train = convert_output2(tones)
 
-model = Sequential()
+print "Creating neural network..."
+ann = create_ann()
+print "Training neural network..."
+ann = train_ann(ann, x_train, y_train)
 
-model.add(Dense(128, input_dim=1, activation='sigmoid'))
-model.add(Dense(1, activation='sigmoid'))
+print "Result:"
+test_tone = LoadTest('samples/test2.wav')
 
-sgd = SGD(lr=0.01, momentum=0.9)
-model.compile(loss='mean_squared_error', optimizer=sgd)
+print len(test_tone.TestSet)
 
-model.fit(x_train, y_train, nb_epoch=2000, batch_size=1, verbose=0, shuffle=False, show_accuracy=False)
-score = model.evaluate(x_train, y_train, batch_size=16)
+i = 0
+j = i + 100
+
+while j < len(test_tone.TestSet):
+    test = []
+    test.append(resize_region(test_tone.TestSet[i:j]))
+    test = prepare_for_rnn(test)
+    result = ann.predict(np.array(test, np.float32))
+    z = j
+
+    if len(test_tone.TestSet) - j < 100:
+        j = len(test_tone.TestSet)
+        i = z
+    else:
+        j += 100
+        i = z
+
+    print display_result(result, tones)

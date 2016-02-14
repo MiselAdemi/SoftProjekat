@@ -24,10 +24,10 @@ class LoadDataSet:
         ylabel('Amplitude')
         subplot(2,1,2)
         self.plotSpectrum(y, rate)
-        show()
+        #show()
 
     def toneFromFreq(self, freq):
-        print freq
+        #print freq
         if (freq >= 127 and freq <= 133):
             return 'C3'
         elif (freq >= 144 and freq <= 153):
@@ -58,8 +58,9 @@ class LoadDataSet:
         Y = fft(y)/n # racunanje fft-a
         Y = Y[range(n/32)]
 
-        self.DataSet = Y
         arr = abs(Y)
+
+        self.DataSet = arr
 
         for i in heapq.nlargest(1, xrange(len(arr)), arr.take):
             self.toneName = self.toneFromFreq(frq[i])
